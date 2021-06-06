@@ -126,6 +126,18 @@ void hexdump(char *out, const uint8_t *buf, int buflen, int start, int count) {
 	*out = '\0';
 }
 
+void hexdump_v(char *out, volatile const uint8_t *buf, int buflen, int start, int count) {
+	for (int i=start;i<start+count;i++) {
+		if (i >= 0 && i < buflen) {
+			sprintf(out, "%02x", buf[i]);
+			out += 2;
+		} else {
+			*out++ = '-'; *out++ = '-';
+		}
+	}	
+	*out = '\0';
+}
+
 int assert_equal_mem(TestContext *ctx, const char *file, int line, const uint8_t *a, const uint8_t *b, int len) {
 	for (int i=0;i<len;i++) {
 		if (a[i] != b[i]) {
@@ -133,6 +145,23 @@ int assert_equal_mem(TestContext *ctx, const char *file, int line, const uint8_t
 			char dumpb[64];
 			hexdump(dumpa, a, len, i-2, 5);
 			hexdump(dumpb, b, len, i-2, 5);
+
+			LOG("ASSERTION FAILED (%s:%d):\n", file, line); \
+			LOG("[%s] != [%s]\n", dumpa, dumpb);
+			LOG("     ^^              ^^  idx: %d\n", i);
+			return 0;
+		}
+	}
+	return 1;
+}
+
+int assert_equal_mem_v(TestContext *ctx, const char *file, int line, volatile const uint8_t *a, volatile const uint8_t *b, int len) {
+	for (int i=0;i<len;i++) {
+		if (a[i] != b[i]) {
+			char dumpa[64];
+			char dumpb[64];
+			hexdump_v(dumpa, a, len, i-2, 5);
+			hexdump_v(dumpb, b, len, i-2, 5);
 
 			LOG("ASSERTION FAILED (%s:%d):\n", file, line); \
 			LOG("[%s] != [%s]\n", dumpa, dumpb);
@@ -153,6 +182,18 @@ int assert_equal_mem(TestContext *ctx, const char *file, int line, const uint8_t
 		return; \
 	} \
 })
+
+// ASSERT_EQUAL_MEM(a, b, len, msg): fail the test if the memory pointer by
+// a and b has not the same content (up to len bytes).
+#define ASSERT_EQUAL_MEM_V(_a, _b, _len, msg, ...) ({ \
+	volatile const uint8_t *a = (_a); const uint8_t *b = (_b); int len = (_len); \
+	if (!assert_equal_mem_v(ctx, __FILE__, __LINE__, a, b, len)) { \
+		LOG(msg "\n", ##__VA_ARGS__); \
+		ctx->result = TEST_FAILED; \
+		return; \
+	} \
+})
+
 
 /**********************************************************************
  * TEST FILES
@@ -185,17 +226,17 @@ static const struct Testsuite
 	uint32_t duration;
 	uint32_t flags;
 } tests[] = {
-	TEST_FUNC(test_exception,              5, TEST_FLAGS_NO_BENCHMARK),
-	TEST_FUNC(test_ticks,                  0, TEST_FLAGS_NO_BENCHMARK | TEST_FLAGS_NO_EMULATOR),
-	TEST_FUNC(test_timer_ticks,          292, TEST_FLAGS_RESET_COUNT),
-	TEST_FUNC(test_timer_oneshot,        596, TEST_FLAGS_RESET_COUNT),
-	TEST_FUNC(test_timer_slow_callback, 1468, TEST_FLAGS_RESET_COUNT),
-	TEST_FUNC(test_timer_continuous,     688, TEST_FLAGS_RESET_COUNT),
-	TEST_FUNC(test_timer_mixed,         1467, TEST_FLAGS_RESET_COUNT),
-	TEST_FUNC(test_irq_reentrancy,       230, TEST_FLAGS_RESET_COUNT),
-	TEST_FUNC(test_dfs_read,            1104, TEST_FLAGS_IO),
-	TEST_FUNC(test_cache_invalidate,    1763, TEST_FLAGS_NONE),
-	TEST_FUNC(test_debug_sdfs,             0, TEST_FLAGS_NO_BENCHMARK),
+    TEST_FUNC(test_exception, 5, TEST_FLAGS_NO_BENCHMARK),
+    TEST_FUNC(test_ticks, 0, TEST_FLAGS_NO_BENCHMARK | TEST_FLAGS_NO_EMULATOR),
+    TEST_FUNC(test_timer_ticks, 576, TEST_FLAGS_NO_BENCHMARK | TEST_FLAGS_RESET_COUNT),
+    TEST_FUNC(test_timer_oneshot, 596, TEST_FLAGS_RESET_COUNT),
+    TEST_FUNC(test_timer_slow_callback, 1468, TEST_FLAGS_RESET_COUNT),
+    TEST_FUNC(test_timer_continuous, 688, TEST_FLAGS_RESET_COUNT),
+    TEST_FUNC(test_timer_mixed, 1467, TEST_FLAGS_RESET_COUNT),
+    TEST_FUNC(test_irq_reentrancy, 230, TEST_FLAGS_RESET_COUNT),
+    TEST_FUNC(test_dfs_read, 1104, TEST_FLAGS_IO),
+    TEST_FUNC(test_cache_invalidate, 1763, TEST_FLAGS_NONE),
+    TEST_FUNC(test_debug_sdfs, 0, TEST_FLAGS_NO_BENCHMARK),
 };
 
 int main() {
